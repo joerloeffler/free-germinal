@@ -2,10 +2,10 @@
 Run Germinal for Antibody design.
 """
 
+import sys
 import time
 from omegaconf import DictConfig
 import hydra
-import pyrosetta as pr
 import numpy as np
 import torch
 
@@ -13,6 +13,22 @@ from germinal.design.design import germinal_design
 from germinal.filters import filter_utils, redesign
 from germinal.utils import utils, config
 from germinal.utils.io import Trajectory
+
+
+def apply_free_backend_flag(argv):
+    """Translate --free into a Hydra scoring_backend override."""
+    if "--free" not in argv:
+        return argv
+
+    filtered = [arg for arg in argv if arg != "--free"]
+    filtered = [
+        arg
+        for arg in filtered
+        if not arg.startswith("scoring_backend=")
+        and not arg.startswith("+scoring_backend=")
+    ]
+    filtered.append("scoring_backend=opensource")
+    return filtered
 
 
 @hydra.main(version_base=None, config_path="configs", config_name="config")
@@ -29,12 +45,22 @@ def main(cfg: DictConfig):
     )
 
     io.save_run_config(run_settings, target_settings)
-    # initialize pyrosetta
-    pr.init(
-        f"-ignore_unrecognized_res -ignore_zero_occupancy -mute all "
-        f"-holes:dalphaball {run_settings['dalphaball_path']} "
-        f"-corrections::beta_nov16 true -relax:default_repeats 1"
-    )
+    # initialize scoring backend
+    scoring_backend = run_settings.get("scoring_backend", "pyrosetta")
+    if scoring_backend == "pyrosetta":
+        import pyrosetta as pr
+
+        pr.init(
+            f"-ignore_unrecognized_res -ignore_zero_occupancy -mute all "
+            f"-holes:dalphaball {run_settings['dalphaball_path']} "
+            f"-corrections::beta_nov16 true -relax:default_repeats 1"
+        )
+    elif scoring_backend in {"opensource", "open_source", "openmm"}:
+        print("Using open-source scoring backend; PyRosetta initialization skipped.")
+    else:
+        raise ValueError(
+            f"Unknown scoring_backend={scoring_backend!r}. Use 'pyrosetta' or 'opensource'."
+        )
     print(f"============================\nExperiment name: {run_settings['experiment_name']}\n============================")
     print(f"Processed config: {target_settings}\n{initial_filters}\n{final_filters}")
 
@@ -254,4 +280,5 @@ def main(cfg: DictConfig):
 
 
 if __name__ == "__main__":
+    sys.argv = apply_free_backend_flag(sys.argv)
     main()

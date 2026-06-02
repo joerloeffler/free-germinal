@@ -14,8 +14,23 @@ from ablang2.models.ablang2.vocab import ablang_vocab
 from iglm import IgLM
 from colabdesign.ablang.model import CustomAbLang
 from germinal.utils import utils
-from germinal.filters import af3, chai, protenix, pDockQ, pyrosetta_utils
+from germinal.filters import af3, chai, protenix, pDockQ
 from germinal.utils.io import IO, Trajectory
+
+
+def get_scoring_backend(run_settings: dict):
+    backend = run_settings.get("scoring_backend", "pyrosetta")
+    if backend == "pyrosetta":
+        from germinal.filters import pyrosetta_utils
+
+        return pyrosetta_utils
+    if backend in {"opensource", "open_source", "openmm"}:
+        from germinal.filters import opensource_utils
+
+        return opensource_utils
+    raise ValueError(
+        f"Unknown scoring_backend={backend!r}. Use 'pyrosetta' or 'opensource'."
+    )
 
 
 def run_filters(
@@ -101,17 +116,19 @@ def run_filters(
         h3_positions=h3_positions,
     )
 
-    # ========================== FastRelax ==========================
+    scoring_backend = get_scoring_backend(run_settings)
+
+    # ========================== Relax ==========================
     if multi_relax:
-        relaxed_paths = pyrosetta_utils.pr_relax_parallel(
+        relaxed_paths = scoring_backend.pr_relax_parallel(
             external_pdb,
             str(structures_directory),
             trajectory.design_name,
-            run_settings["dalphaball_path"],
+            run_settings.get("dalphaball_path"),
             n_relax=run_settings.get("n_relax", 5),
         )
         (best_interface_scores, best_interface_AA, best_interface_residues,
-         best_relaxed_pdb) = pyrosetta_utils.score_interface_ensemble(
+         best_relaxed_pdb) = scoring_backend.score_interface_ensemble(
             relaxed_paths, binder_chain, target_chain,
             score_mode=run_settings.get("relax_score_mode", "average"),
         )
@@ -134,7 +151,7 @@ def run_filters(
         external_relaxed_pdb = os.path.join(
             structures_directory, trajectory.design_name + "_relaxed.pdb"
         )
-        pyrosetta_utils.pr_relax(external_pdb, external_relaxed_pdb)
+        scoring_backend.pr_relax(external_pdb, external_relaxed_pdb)
 
         # ========================== Calculate Clashes ==========================
         clash_threshold = run_settings["clash_threshold"]
@@ -151,7 +168,7 @@ def run_filters(
             k: v
             for k, v in zip(
                 interface_metric_names,
-                pyrosetta_utils.score_interface(
+                scoring_backend.score_interface(
                     external_relaxed_pdb, binder_chain, target_chain=target_chain
                 ),
             )
@@ -184,6 +201,7 @@ def run_filters(
             distance_threshold=run_settings["hotspot_distance_threshold"],
             contact_distance=run_settings["residue_contact_distance"],
             min_hotspot_contacts=run_settings["min_cdr_hotspot_contacts"],
+            scoring_backend=scoring_backend,
         )
     )
 
@@ -246,7 +264,7 @@ def run_filters(
     }
 
     # ========================== Calculate Hydrophobic Patch Filter ==========================
-    sap_score, cdr_sap, _, hydrophobic_patches_binder = pyrosetta_utils.get_sap_score(
+    sap_score, cdr_sap, _, hydrophobic_patches_binder = scoring_backend.get_sap_score(
         external_relaxed_pdb,
         binder_chain=binder_chain,
         only_binder=True,
@@ -260,10 +278,10 @@ def run_filters(
 
     # ========================== Calculate RMSD of Binder between Multimer and External Predictor ==========================
     try:
-        pyrosetta_utils.align_pdbs(
+        scoring_backend.align_pdbs(
             external_pdb, trajectory_pdb_af, target_chain, target_chain
         )
-        binder_rmsd = pyrosetta_utils.unaligned_rmsd(
+        binder_rmsd = scoring_backend.unaligned_rmsd(
             external_pdb, trajectory_pdb_af, binder_chain, binder_chain
         )
 
@@ -679,6 +697,7 @@ def compute_hotspot_proximity(
     distance_threshold: float = 5.3,
     contact_distance: float = 6.0,
     min_hotspot_contacts: int = 3,
+    scoring_backend=None,
 ) -> Tuple[bool, int, int]:
     """
     Compute CDR contacts with target hotspot residues (5.3Å threshold, ≥3 contacts required).
@@ -707,14 +726,17 @@ def compute_hotspot_proximity(
 
             target_hotspots = np.array(utils.idx_from_ranges(target_settings["target_hotspots"],ch,offset=offset))+1
 
-            hotspot_region = pyrosetta_utils.find_nearby_residues_from_pdb(
+            if scoring_backend is None:
+                scoring_backend = get_scoring_backend({"scoring_backend": "pyrosetta"})
+
+            hotspot_region = scoring_backend.find_nearby_residues_from_pdb(
                 external_relaxed_pdb,
                 target_hotspots,
                 distance_threshold=distance_threshold,
                 chain=ch,
             )
 
-            contacts = pyrosetta_utils.get_residue_contacts(
+            contacts = scoring_backend.get_residue_contacts(
                 external_relaxed_pdb, ch, binder_chain, contact_distance
             )
             contacts_per_chain = np.array(list(contacts.keys()))

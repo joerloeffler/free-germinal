@@ -85,7 +85,7 @@ class _af_utils:
     p_str = ""
     p_shape = p["atom_positions"].shape[0] if save_all else 1 
     for n in range(p_shape):
-      p_str += to_pdb_str(jax.tree_map(lambda x:x[n],p), n+1)
+      p_str += to_pdb_str(jax.tree_util.tree_map(lambda x:x[n],p), n+1)
     p_str += "END\n"
     
     if filename is None:

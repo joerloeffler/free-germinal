@@ -34,8 +34,12 @@ behavior changes you should know about:
 - **AF3/Protenix sample selection** (`af3_structure_select_mode`): pick the
   `"best"` (highest ranking_score) or `"worst"` AF3/Protenix sample.
 - **Multi-relax ensemble** (`multi_relax: true`, `n_relax: 5`,
-  `relax_score_mode: "average"|"best"`): post-prediction PyRosetta relax can
-  now spawn N parallel relaxes and aggregate their interface scores.
+  `relax_score_mode: "average"|"best"`): post-prediction relax can now spawn
+  N parallel relaxes and aggregate their interface scores.
+- **Open-source scoring backend** (`scoring_backend: "opensource"`): runs
+  relaxation/scoring without PyRosetta using OpenMM/PDBFixer, MDTraj,
+  FreeSASA-style SASA calculations, and geometry-based interface proxies.
+  Keep `scoring_backend: "pyrosetta"` for Rosetta-compatible thresholds.
 - **VL-first scFv** (PR #67): scFv runs with `vh_first: false` now correctly
   identify H-CDR3 from the last CDR (was previously mis-sliced into VL).
 
@@ -78,6 +82,7 @@ behavior changes you should know about:
 
 ### Config additions you should review
 All five tracked configs in `configs/run/` now expose:
+- `scoring_backend` (`"pyrosetta"` or `"opensource"`)
 - `multi_relax`, `n_relax`, `relax_score_mode` (only `scfv_pdl1.yaml` had
   these before)
 - `cache_binder_msa` (was missing everywhere)
@@ -120,7 +125,9 @@ All five tracked configs in `configs/run/` now expose:
 ### Requirements
 
 **Prerequisites:**
-- [PyRosetta](https://www.pyrosetta.org/) (academic license required)
+- Scoring backend:
+  - `scoring_backend: "opensource"` uses open-source packages and does not require PyRosetta.
+  - `scoring_backend: "pyrosetta"` uses [PyRosetta](https://www.pyrosetta.org/) and requires a separate academic/commercial license.
 - [ColabDesign/AlphaFold-Multimer parameters](https://storage.googleapis.com/alphafold/alphafold_params_2022-12-06.tar) (click link for download or see below for cli)
 - [AlphaFold3 parameters](https://github.com/google-deepmind/alphafold3) (optional)
 - JAX with GPU support
@@ -132,6 +139,34 @@ All five tracked configs in `configs/run/` now expose:
 
 > *The pipeline has been tested on: A100 40GB, H100 40GB MIG, L40S 48GB, A100 80GB, and H100 80GB.
 > These runs tested a 130 amino acid target with a 131 amino acid nanobody. For larger runs, we recommend 60GB+ VRAM.
+
+### Blackwell / CUDA 13 Free Backend
+
+The PyRosetta-free backend has also been validated on Blackwell-class NVIDIA nodes using CUDA 13. A working validation environment reported:
+
+```text
+JAX backend: gpu
+Torch: 2.12.0+cu130
+CUDA available: True
+```
+
+Use the Blackwell environment file when setting up these nodes:
+
+```bash
+micromamba create -f environment_blackwell.yaml
+micromamba activate germinal
+uv pip install -e colabdesign
+uv pip install -e .
+python validate_install.py --free
+```
+
+If `validate_install.py --free` reports missing open-source scoring packages, install them into the active environment:
+
+```bash
+micromamba install -n germinal -c conda-forge openmm pdbfixer freesasa biotite
+```
+
+`--free` is the recommended mode on Blackwell unless you have a licensed PyRosetta install in the same environment. It forces `scoring_backend=opensource` and skips PyRosetta initialization.
 
 <!-- TOC --><a name="installation"></a>
 ### Installation
@@ -159,6 +194,7 @@ All five tracked configs in `configs/run/` now expose:
 6. (Optional) Run validation at any time to ensure all packages have installed correctly:
    ```bash
    python validate_install.py
+   python validate_install.py --free  # skip PyRosetta checks
    ```
 
 Notes:
@@ -166,7 +202,8 @@ Notes:
 
 <!-- TOC --><a name=docker"></a>
 ### Docker
-Germinal can be run using Docker:
+Germinal can be run using Docker. The default image is the license-clean build
+without PyRosetta:
 
 ```bash
 docker build -t germinal .
@@ -174,6 +211,13 @@ docker run -it --rm --gpus all \
   -v "$PWD/results:/workspace/results" \
   -v "$PWD/pdbs:/workspace/pdbs" \
   germinal bash
+```
+
+To build the PyRosetta-enabled image, set `INSTALL_PYROSETTA=true` and make sure
+your intended use complies with the PyRosetta license:
+
+```bash
+docker build --build-arg INSTALL_PYROSETTA=true -t germinal:pyrosetta .
 ```
 
 and Singularity (shown)/Apptainer:
@@ -192,7 +236,7 @@ Volumes are mounted to save generated input complexes and results from sampling.
 
 Once inside the container you can test:
 ```bash
-python run_germinal.py
+python run_germinal.py --free
 ```
 
 <!-- TOC --><a name="usage"></a>
@@ -258,6 +302,80 @@ If you wish to change the configuration of runs, you can:
 python run_germinal.py
 ```
 
+**Run without PyRosetta:**
+```bash
+python run_germinal.py --free
+```
+
+`--free` is shorthand for `scoring_backend=opensource` and removes any explicit
+`scoring_backend=pyrosetta` override from the command line before Hydra parses
+the config.
+
+**8YWA real-life free-backend test:**
+
+The bundled `configs/target/8ywa.yaml` points to `pdbs/8YWA.pdb` and uses the
+user-selected chain-A hotspots `HIS66`, `GLU72`, `ASN79`, and `LYS84`
+(`target_hotspots: "A66,A72,A79,A84"`). To run the prepared one-trajectory
+SLURM test:
+
+```bash
+sbatch slurm/run_germinal_8ywa_free.sbatch
+```
+
+Equivalent direct command:
+
+```bash
+python -u run_germinal.py --free \
+  run=vhh \
+  target=8ywa \
+  filter/initial=vhh \
+  filter/final=vhh \
+  experiment_name=8ywa_vhh_free_test \
+  max_trajectories=1 \
+  max_hallucinated_trajectories=1 \
+  max_passing_designs=1
+```
+
+**Blackwell/SLURM PD-L1 smoke-test template:**
+
+```bash
+#!/bin/bash
+#SBATCH --job-name=GER
+#SBATCH --cpus-per-task=16
+#SBATCH --nodes=1
+#SBATCH --mem=48gb
+#SBATCH --partition=medium
+#SBATCH --gres=shard:60
+#SBATCH --nodelist=ai
+#SBATCH --output=slurm.%j.out
+#SBATCH --error=slurm.%j.err
+
+set -euo pipefail
+
+eval "$(/z/linux/bin/micromamba shell hook --shell bash)"
+micromamba activate /z/bio/biotools/miniconda/envs/germinal
+
+export PYTHONUNBUFFERED=1
+export HYDRA_FULL_ERROR=1
+export MPLCONFIGDIR="${TMPDIR:-/tmp}/matplotlib-${USER}"
+export XLA_PYTHON_CLIENT_PREALLOCATE=false
+export XLA_CLIENT_MEM_FRACTION=0.75
+mkdir -p "$MPLCONFIGDIR"
+
+python validate_install.py --free
+
+python -u run_germinal.py --free \
+  run=vhh_pdl1 \
+  target=pdl1 \
+  filter/initial=vhh_pdl1 \
+  filter/final=vhh_pdl1 \
+  experiment_name=pdl1_vhh_free_test \
+  target.target_pdb_path=pdbs/pdl1.pdb \
+  max_trajectories=1 \
+  max_hallucinated_trajectories=1 \
+  max_passing_designs=1
+```
+
 **Switch to a different run config (e.g., new_config):**
 ```bash
 python run_germinal.py run=new_config
@@ -289,6 +407,9 @@ Hydra provides powerful CLI override capabilities. You can override any paramete
 ```bash
 # Override trajectory limits
 python run_germinal.py max_trajectories=100 max_passing_designs=50
+
+# Use the open-source scoring backend without the shorthand flag
+python run_germinal.py scoring_backend=opensource
 
 # Override experiment settings
 python run_germinal.py experiment_name=my_experiment run_config=test_run
@@ -365,9 +486,25 @@ binder_near_hotspot:
   operator: '=='
 ```
 
-**Multi-relax ensemble (`multi_relax`):** by default Germinal runs a single PyRosetta FastRelax per structure during final filters. Setting `multi_relax: true` runs `n_relax` relaxations in parallel with different random seeds. `relax_score_mode` controls how the ensemble result is reported: `"average"` (default) averages numeric metrics across all runs; `"best"` returns metrics from the single lowest-energy run only. In both modes the structure with the lowest `binder_score` (most negative REU) is saved.
+**Scoring backend (`scoring_backend`):** Germinal supports two post-prediction scoring paths:
 
 ```yaml
+scoring_backend: "pyrosetta"    # Rosetta FastRelax + Rosetta interface metrics
+# scoring_backend: "opensource" # OpenMM/PDBFixer relax + open-source proxy metrics
+```
+
+The open-source backend avoids PyRosetta licensing by using OpenMM/PDBFixer for restrained minimization, MDTraj for SASA/RMSD plumbing, and geometry-based contact/H-bond/hydrophobic patch proxies. It preserves the existing metric keys (`binder_score`, `interface_shape_comp`, `interface_hbonds`, `sap_score`, etc.) so the CSV and filter code still work, but the values are **not Rosetta-equivalent**. Recalibrate filters such as `interface_shape_comp`, `interface_packstat`, `interface_dG`, `binder_score`, and `sap_score` before using them for production acceptance.
+
+You can also force the open-source backend from the CLI:
+
+```bash
+python run_germinal.py --free
+```
+
+**Multi-relax ensemble (`multi_relax`):** by default Germinal runs a single backend relax per structure during final filters. Setting `multi_relax: true` runs `n_relax` relaxations and aggregates their interface scores. `relax_score_mode` controls how the ensemble result is reported: `"average"` (default) averages numeric metrics across all runs; `"best"` returns metrics from the single lowest-energy run only. In both modes the structure with the lowest `binder_score` is saved.
+
+```yaml
+scoring_backend: "opensource"
 multi_relax: true
 n_relax: 5
 relax_score_mode: "average"  # or "best"
@@ -620,6 +757,12 @@ If you use components of this pipeline, please also cite the underlying methods:
 - **AbMPNN**: [Dreyer, F. A., Cutting, D., Schneider, C., Kenlay, H. & Deane, C. M. Inverse folding for
 antibody sequence design using deep learning. (2023).](https://www.biorxiv.org/content/10.1101/2025.05.09.653228v1.full.pdf)
 - **PyRosetta**: [https://www.pyrosetta.org/](https://www.pyrosetta.org/)
+- **OpenMM**: [https://openmm.org/](https://openmm.org/)
+- **PDBFixer**: [https://github.com/openmm/pdbfixer](https://github.com/openmm/pdbfixer)
+- **MDTraj**: [https://github.com/mdtraj/mdtraj](https://github.com/mdtraj/mdtraj)
+- **FreeSASA**: [https://github.com/mittinatten/freesasa](https://github.com/mittinatten/freesasa)
+- **Biotite**: [https://github.com/biotite-dev/biotite](https://github.com/biotite-dev/biotite)
+- **PRODIGY**: [https://github.com/haddocking/prodigy](https://github.com/haddocking/prodigy)
 
 <!-- TOC --><a name="community-acknowledgments"></a>
 ## Community Acknowledgments
@@ -641,3 +784,4 @@ Some components require separate licenses that are not included in this reposito
 - **PyRosetta**: Provided by the Rosetta Commons and University of Washington under a non-commercial, non-profit license.  
   PyRosetta cannot be redistributed and must be obtained separately.  
   Commercial use requires a separate license. See [https://www.pyrosetta.org](https://www.pyrosetta.org).
+- **Open-source scoring backend**: `scoring_backend: "opensource"` avoids PyRosetta and uses redistributable open-source packages. Check each dependency license for your deployment context, especially if redistributing binaries or containers.

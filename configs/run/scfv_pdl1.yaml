@@ -103,6 +103,8 @@ num_recycles_design: 3
 recycle_mode: "last"
 soft_iterations: 60
 
+# Relax (post-prediction) settings
+scoring_backend: "pyrosetta"        # "pyrosetta" or "opensource"
 multi_relax: false
 n_relax: 5
 relax_score_mode: "average"

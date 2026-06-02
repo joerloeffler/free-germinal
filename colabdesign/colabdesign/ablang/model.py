@@ -23,7 +23,7 @@ class CustomAbLang(nn.Module):
         seed: Optional[int] = 0) -> None:
         """Configure temperature and device; set scFv split attributes externally."""
         super().__init__()
-        self.device = device or torch.device('cuda' if torch.cuda.is_available() else 'cpu')
+        self.device = torch.device('cpu')
         self.tau = ablm_temp
         self.ablm_method: str = ablm_method
         self.is_scfv: bool = is_scfv

@@ -11,6 +11,20 @@ conda create --name germinal python=3.10
 conda activate germinal
 ```
 
+For Blackwell/CUDA 13 nodes, use the dedicated environment file instead:
+
+```bash
+micromamba create -f environment_blackwell.yaml
+micromamba activate germinal
+```
+
+The Blackwell environment is intended for the PyRosetta-free path:
+
+```bash
+python validate_install.py --free
+python run_germinal.py --free
+```
+
 We use `uv` to speed up the installation process. Subsequent `pip install` commands will use `uv` but feel free to skip this step and install with `pip` normally.
 #### 1b. Install uv
 
@@ -29,7 +43,7 @@ uv pip install pandas matplotlib numpy biopython scipy seaborn tqdm ffmpeg py3dm
 
 ---
 
-## 3. Install ColabDesign and PyRosetta
+## 3. Install ColabDesign and scoring backends
 
 > **Note:** Make sure you are in the **Germinal root directory** before running this.
 
@@ -37,7 +51,11 @@ uv pip install pandas matplotlib numpy biopython scipy seaborn tqdm ffmpeg py3dm
 # ColabDesign (editable install)
 uv pip install -e colabdesign
 
-# PyRosetta
+# Open-source scoring backend (for scoring_backend: "opensource")
+conda install -c conda-forge openmm pdbfixer freesasa biotite
+uv pip install prodigy-prot
+
+# Optional: PyRosetta backend (for scoring_backend: "pyrosetta")
 uv pip install pyrosetta-installer
 python -c 'import pyrosetta_installer; pyrosetta_installer.install_pyrosetta()'
 ```
@@ -75,4 +93,3 @@ uv pip install "jax[cuda12_pip]==0.5.3" -f https://storage.googleapis.com/jax-re
 uv pip install ablang2 --no-deps
 uv pip install rotary_embedding_torch --no-deps 
 ```
-

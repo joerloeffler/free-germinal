@@ -24,6 +24,7 @@ def cmd_ok(cmd: List[str]) -> bool:
         return False
 
 def main() -> int:
+    free_mode = "--free" in sys.argv
     required = [
         "numpy",
         "scipy",
@@ -70,21 +71,36 @@ def main() -> int:
         else:
             return 2
 
-    print_status("INFO", "Checking PyRosetta (optional)")
-    try:
-        import pyrosetta  # type: ignore
-        print_status("OK", "PyRosetta available")
-    except Exception:
+    print_status("INFO", "Checking open-source scoring backend packages")
+    optional_oss = ["openmm", "pdbfixer", "freesasa", "biotite"]
+    missing_oss = [p for p in optional_oss if not try_import(p)]
+    if missing_oss:
         print_status(
             "WARN",
-            "PyRosetta not found. If you have a licensed build, install via: \n"
-            "  bash scripts/install_env.sh --pyrosetta /path/to/pyrosetta.whl\n"
-            "See README for details."
+            "Open-source scoring backend missing packages: "
+            + ", ".join(missing_oss)
+            + ". Install environment.yml dependencies before using scoring_backend=opensource.",
         )
+    else:
+        print_status("OK", "Open-source scoring backend packages available")
+
+    if free_mode:
+        print_status("INFO", "--free set; skipping PyRosetta check")
+    else:
+        print_status("INFO", "Checking PyRosetta (optional)")
+        try:
+            import pyrosetta  # type: ignore
+            print_status("OK", "PyRosetta available")
+        except Exception:
+            print_status(
+                "WARN",
+                "PyRosetta not found. Use --free/scoring_backend=opensource, or install a licensed build via: \n"
+                "  bash scripts/install_env.sh --pyrosetta /path/to/pyrosetta.whl\n"
+                "See README for details."
+            )
 
     print_status("OK", "All checks passed")
     return 0
 
 if __name__ == "__main__":
     sys.exit(main())
-

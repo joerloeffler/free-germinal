@@ -22,6 +22,10 @@ ENV PYTHONUNBUFFERED=1 MPLBACKEND=Agg HYDRA_FULL_ERROR=1 PIP_NO_CACHE_DIR=1
 
 WORKDIR /workspace
 
+RUN micromamba install -y -n ${CONDA_ENV} -c conda-forge \
+  openmm pdbfixer freesasa biotite \
+  && micromamba clean -a -y
+
 COPY setup.py README.md ./
 COPY colabdesign /workspace/colabdesign
 
@@ -30,6 +34,7 @@ ARG TORCHVISION_VERSION=0.21.0
 ARG TORCHAUDIO_VERSION=2.6.0
 ARG CUDA_SUFFIX=cu124                    # use 'cpu' for CPU-only builds
 ARG JAX_CUDA=true                        # 'false' for CPU-only JAX
+ARG INSTALL_PYROSETTA=false              # 'true' to include licensed PyRosetta
 ARG TORCH_INDEX_URL=https://download.pytorch.org/whl/${CUDA_SUFFIX}
 
 # install pip packages
@@ -37,12 +42,12 @@ RUN set -euxo pipefail; \
   python -m pip install --upgrade pip wheel setuptools; \
   python -m pip install uv; \
   uv pip install --system pandas matplotlib numpy biopython scipy seaborn tqdm ffmpeg py3dmol \
-  chex dm-haiku dm-tree joblib ml-collections immutabledict optax cvxopt mdtraj colabfold ipsae==1.0.1; \
+  chex dm-haiku dm-tree joblib ml-collections immutabledict optax cvxopt mdtraj prodigy-prot colabfold ipsae==1.0.1; \
   uv pip install --system -e /workspace/colabdesign; \
   uv pip install --system --index-url "${TORCH_INDEX_URL}" \
     "torch==${TORCH_VERSION}" \
     "torchvision==${TORCHVISION_VERSION}" \
-    "torchaudio==${TORCHAUDIO_VERSION}"; \ 
+    "torchaudio==${TORCHAUDIO_VERSION}"; \
   uv pip install --system torchtyping==0.1.5; \
   if [ "${CUDA_SUFFIX}" = "cpu" ]; then \
     PYG_URL="https://data.pyg.org/whl/torch-${TORCH_VERSION}+cpu.html"; \
@@ -65,10 +70,13 @@ RUN set -euxo pipefail; \
   uv pip install rotary_embedding_torch==0.8.9 --system --no-deps; \
   true
 
-# download pyrosetta
 RUN set -euxo pipefail; \
-  uv pip install --system pyrosetta-installer; \
-  python -c "import pyrosetta_installer; pyrosetta_installer.install_pyrosetta()"; \
+  if [ "${INSTALL_PYROSETTA}" = "true" ]; then \
+    uv pip install --system pyrosetta-installer; \
+    python -c "import pyrosetta_installer; pyrosetta_installer.install_pyrosetta()"; \
+  else \
+    echo "Skipping PyRosetta install; use run_germinal.py --free or scoring_backend=opensource."; \
+  fi; \
   true
 
 COPY . /workspace

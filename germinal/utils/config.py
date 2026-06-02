@@ -179,9 +179,9 @@ def initialize_germinal_run(
 
     # Apply configuration updates and validation logic
     if run_settings.get("use_multimer_design"):
-        run_settings["design_models"] = [0, 1, 2, 3, 4]
+        run_settings["design_models"] = [0]
     else:
-        run_settings["design_models"] = [0, 1]
+        run_settings["design_models"] = [0]
     # Normalize negative bias values to False for consistency
     if run_settings.get("bias_redesign") < 0:
         run_settings["bias_redesign"] = False

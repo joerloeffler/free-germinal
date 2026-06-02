@@ -102,7 +102,8 @@ num_recycles_design: 3
 recycle_mode: "last"
 
 # Relax (post-prediction) settings
-multi_relax: false                  # true → ensemble of n_relax PyRosetta relaxes
+scoring_backend: "pyrosetta"        # "pyrosetta" or "opensource"
+multi_relax: false                  # true → ensemble of n_relax backend relaxes
 n_relax: 5                          # only used when multi_relax=true
 relax_score_mode: "average"         # "average" or "best" (only used when multi_relax=true)
 

@@ -1,0 +1,75 @@
+name: germinal
+
+channels:
+  - conda-forge
+
+dependencies:
+  - python=3.11
+
+  # Scientific stack
+  - numpy=1.26.4
+  - scipy
+  - pandas
+  - matplotlib
+  - networkx
+  - biopython
+
+  # MD / structural biology
+  - openmm=8.5.1
+  - pdbfixer
+  - mdtraj
+  - biotite
+  - freesasa
+
+  # Utilities
+  - pyyaml
+  - requests
+  - tqdm
+  - omegaconf
+  - hydra-core
+
+  # Build/runtime
+  - pip
+
+  - pip:
+
+      # Core JAX stack (Blackwell)
+      - jax==0.10.1
+      - jaxlib==0.10.1
+      - jax-cuda13-plugin==0.10.1
+      - jax-cuda13-pjrt==0.10.1
+
+      # ColabDesign dependencies
+      - dm-haiku==0.0.16
+      - chex==0.1.85
+      - optax==0.1.7
+      - dm-tree==0.1.10
+      - ml-dtypes==0.5.4
+      - ml-collections==1.1.0
+
+      # Antibody language models
+      - ablang2==0.2.1
+      - iglm==0.1.0
+
+      # Structure prediction
+      - colabfold==1.6.1
+      - chai_lab==0.6.1
+
+      # PyTorch stack observed working on Blackwell/CUDA 13 nodes
+      - --extra-index-url https://download.pytorch.org/whl/cu130
+      - torch==2.12.0+cu130
+      - torchvision==0.27.0+cu130
+      - torchaudio==2.12.0+cu130
+
+      # Protein utilities
+      - rdkit==2024.9.6
+      - tmtools==0.3.0
+      - gemmi==0.6.7
+
+      # Transformers
+      - transformers
+      - tokenizers
+      - safetensors
+
+      # Optional
+      - py3Dmol
