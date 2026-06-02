@@ -336,6 +336,12 @@ python -u run_germinal.py --free \
   max_passing_designs=1
 ```
 
+The generic VHH config now defaults to `ablm_model: "ablang"`, matching the
+PD-L1 preset and avoiding the IgLM/Transformers import path that can fail on
+some Blackwell/CUDA 13 environments. To intentionally use IgLM, pass
+`ablm_model=iglm` after confirming your `transformers` and `torch` versions are
+compatible.
+
 **Blackwell/SLURM PD-L1 smoke-test template:**
 
 ```bash

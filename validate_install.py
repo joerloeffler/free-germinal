@@ -71,6 +71,19 @@ def main() -> int:
         else:
             return 2
 
+    print_status("INFO", "Checking IgLM/Transformers compatibility (optional)")
+    try:
+        import transformers
+
+        _ = transformers.GPT2LMHeadModel
+        print_status("OK", "Transformers GPT2LMHeadModel available")
+    except Exception as e:
+        print_status(
+            "WARN",
+            "IgLM may fail in this environment. Prefer ablm_model=ablang "
+            f"or pin compatible torch/transformers versions. Error: {e}",
+        )
+
     print_status("INFO", "Checking open-source scoring backend packages")
     optional_oss = ["openmm", "pdbfixer", "freesasa", "biotite"]
     missing_oss = [p for p in optional_oss if not try_import(p)]

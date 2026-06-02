@@ -39,10 +39,10 @@ i_ptm_threshold: 0.68
 i_pae_threshold: 0.27
 seq_entropy_threshold: 0.10
 
-# IgLM settings
-ablm_model: "iglm"
+# Antibody language model settings
+ablm_model: "ablang"
 grad_merge_method: "pcgrad"
-ablm_scale: [0.2, 0.4, 0.4, 1.0]
+ablm_scale: [0.0, 0.2, 0.4, 1.0]
 ablm_temp: 0.6
 iglm_species: "[HUMAN]"
 seq_init_mode: ["gumbel", "soft"]  # STATIC: Fixed list, no argparse option
